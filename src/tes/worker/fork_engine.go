@@ -42,19 +42,26 @@ func (forkManager *ForkManager) worker(inchan chan ga4gh_task_exec.Job) {
 	}
 }
 
+// TODO: sched is the same things as filestore.sched
 func (forkManager *ForkManager) watcher(sched ga4gh_task_ref.SchedulerClient, filestore FileMapper) {
 	forkManager.sched = sched
 	forkManager.files = filestore
 	hostname, _ := os.Hostname()
+	// Make a channel which can take up to 10 jobs before blocking.
 	jobchan := make(chan ga4gh_task_exec.Job, 10)
+	// For each nworker (forkManager.procCount), call forkManager.worker
 	for i := 0; i < forkManager.procCount; i++ {
 		go forkManager.worker(jobchan)
 	}
 	var sleepSize int64 = 1
+	// forkManager.running is never modified, and this is always
+	// true. watcher will enter an infinite loop here. We probably
+	// want a better exiting strategy
 	for forkManager.running {
 		if forkManager.checkFunc != nil {
 			forkManager.checkFunc(forkManager.status)
 		}
+		// Get a JobResponse from passing worker info to GetJobToRun
 		task, err := forkManager.sched.GetJobToRun(forkManager.ctx,
 			&ga4gh_task_ref.JobRequest{
 				Worker: &ga4gh_task_ref.WorkerInfo{
@@ -83,6 +90,7 @@ func (forkManager *ForkManager) watcher(sched ga4gh_task_ref.SchedulerClient, fi
 
 // Start documentation
 // TODO: documentation
+// TODO: Run, Start, and watcher all do the same thing. Simplify?
 func (forkManager *ForkManager) Start(engine ga4gh_task_ref.SchedulerClient, files FileMapper) {
 	go forkManager.watcher(engine, files)
 }

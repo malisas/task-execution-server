@@ -18,12 +18,17 @@ func main() {
 	volumeDirArg := flag.String("volumes", "volumes", "Volume Dir")
 	storageDirArg := flag.String("storage", "storage", "Storage Dir")
 	fileSystemArg := flag.String("files", "", "Allowed File Paths")
+	// TODO: swiftDirArg value does not change behaviour of the code
 	swiftDirArg := flag.String("swift", "", "Cache Swift items in directory")
 	timeoutArg := flag.Int("timeout", -1, "Timeout in seconds")
 
+	// TODO: nworkers is not used
 	nworker := flag.Int("nworkers", 4, "Worker Count")
 	flag.Parse()
+	// volumeDir is the absolute path of volumeDirArg
 	volumeDir, _ := filepath.Abs(*volumeDirArg)
+	// Check if volumeDir exists. If it doesn't, create it.
+	// TODO: see if this can be done without os.Stat, which returns extra information.
 	if _, err := os.Stat(volumeDir); os.IsNotExist(err) {
 		os.Mkdir(volumeDir, 0700)
 	}
@@ -34,16 +39,23 @@ func main() {
 		panic(err)
 	}
 	defer conn.Close()
+	// schedClient is a new SchedulerClient, defined as Scheduler
+	// in proto/task_worker.proto. It has one field, a
+	// *grpc.ClientConn which is passed in here during construction.
 	schedClient := ga4gh_task_ref.NewSchedulerClient(conn)
 
+	// We define fileClient to be any type that implements the
+	// FileSystemAccess interface (2 functions, Get and Put)
 	var fileClient tesTaskEngineWorker.FileSystemAccess
 
+	// TODO: refactor to use case matching
 	if *swiftDirArg != "" {
 		storageDir, _ := filepath.Abs(*swiftDirArg)
 		if _, err := os.Stat(storageDir); os.IsNotExist(err) {
 			os.Mkdir(storageDir, 0700)
 		}
 
+		// Define fileClient to be type SwiftAccess
 		fileClient = tesTaskEngineWorker.NewSwiftAccess()
 	} else if *fileSystemArg != "" {
 		o := []string{}
@@ -51,19 +63,26 @@ func main() {
 			p, _ := filepath.Abs(i)
 			o = append(o, p)
 		}
+		// Define fileClient to be type FileAccess
 		fileClient = tesTaskEngineWorker.NewFileAccess(o)
 	} else {
 		storageDir, _ := filepath.Abs(*storageDirArg)
 		if _, err := os.Stat(storageDir); os.IsNotExist(err) {
 			os.Mkdir(storageDir, 0700)
 		}
+		// fileClient is now FileStorageAccess type
 		fileClient = tesTaskEngineWorker.NewSharedFS(storageDir)
 	}
+	// fileMapper is a new FileMapper created using the above fileClient
 	fileMapper := tesTaskEngineWorker.NewFileMapper(&schedClient, fileClient, volumeDir)
 
+	// create 16-byte "random" ID
 	u, _ := uuid.NewV4()
+	// Create a ForkManager
 	manager, _ := tesTaskEngineWorker.NewLocalManager(*nworker, u.String())
+	// TODO: Ask Kyle what is going on here, especially with SetStatusCheck and pings.
 	if *timeoutArg <= 0 {
+		// Is there a reason it isn't &schedClient??
 		manager.Run(schedClient, *fileMapper)
 	} else {
 		var startCount int32
