@@ -30,6 +30,7 @@ func (forkManager *ForkManager) worker(inchan chan ga4gh_task_exec.Job) {
 		atomic.AddInt32(&forkManager.status.JobCount, 1)
 		log.Printf("Launch job: %s", job)
 		s := ga4gh_task_exec.State_Running
+		// What is UpdateJobStatus doing? Doesn't it return a JobId and a possible error? Why doesnt it get stored, and what is the internal Invoke() function doing?
 		forkManager.sched.UpdateJobStatus(forkManager.ctx, &ga4gh_task_ref.UpdateStatusRequest{Id: job.JobId, State: s})
 		err := RunJob(&job, forkManager.files)
 		if err != nil {

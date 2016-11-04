@@ -80,13 +80,13 @@ func main() {
 	u, _ := uuid.NewV4()
 	// Create a ForkManager
 	manager, _ := tesTaskEngineWorker.NewLocalManager(*nworker, u.String())
-	// TODO: Ask Kyle what is going on here, especially with SetStatusCheck and pings.
 	if *timeoutArg <= 0 {
 		// Is there a reason it isn't &schedClient??
 		manager.Run(schedClient, *fileMapper)
 	} else {
 		var startCount int32
 		lastPing := time.Now().Unix()
+		// TODO: Fix data race. SetStatusCheck takes a func() which accesses lastPing. It gets assigned internally within manager to the checkFunc() field. This is used within the manager.Start() call a few lines later. manager.Start() spawns a new thread, from which checkFunc() is called. Notice that near the end of this file, lastPing is read. This means that one thread is reading lastPing while another is writing to lastPing concurrently. This results in a data race.
 		manager.SetStatusCheck(func(status tesTaskEngineWorker.EngineStatus) {
 			if status.JobCount > startCount || status.ActiveJobs > 0 {
 				startCount = status.JobCount
